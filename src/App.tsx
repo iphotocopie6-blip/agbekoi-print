@@ -2,7 +2,7 @@ import { useState, useMemo, useEffect } from "react";
 import {
   Printer, Flag, CreditCard, FileText, Shirt, Sticker, Heart, BookOpen,
   Calculator, Sparkles, Settings, Save, Eye, DollarSign, Type, Lock,
-  ArrowUpRight, MessageCircle, Phone, Download
+  ArrowUpRight, MessageCircle, Phone, Download, Share, Smartphone
 } from "lucide-react";
 
 type Service = {
@@ -29,10 +29,10 @@ const DEFAULT_SERVICES: Service[] = [
   { id: "bache", label: "Bâche / Bandéroles", desc: "Résistante, œillets inclus, extérieur", iconName: "Flag", base: 6500, unit: "par m²", formats: ["1m²","2m²","3m²","6m²"] },
   { id: "carte", label: "Cartes de visite", desc: "Recto/verso, pelliculage mat soft-touch", iconName: "CreditCard", base: 15000, unit: "les 100", formats: ["Standard","Premium","Luxe"] },
   { id: "flyer", label: "Flyers / Dépliants", desc: "A5, A4 pliés, distribution efficace", iconName: "FileText", base: 12000, unit: "les 100", formats: ["A5","A4","A4 plié"] },
-  { id: "tshirt", label: "T-shirts / Personnalisation", desc: "Sérigraphie, DTG, flocage pro", iconName: "Shirt", base: 5500, unit: "par pièce", formats: ["S-M-L","XL-XXL","Enfant"] },
+  { id: "tshirt", label: "T-shirts / Personnalisation", desc: "Sérigraphie, DTG, flocage pro", iconName: "Shirt", base: 2000, unit: "par pièce", formats: ["S-M-L","XL-XXL","Enfant"] },
   { id: "vinyle", label: "Autocollants / Vinyle", desc: "Découpe, impression véhicule", iconName: "Sticker", base: 2000, unit: "par planche A3", formats: ["A3","A2","Découpe"] },
-  { id: "fairepart", label: "Faire-part / Invitations", desc: "Mariage, baptême, luxe dorure", iconName: "Heart", base: 500, unit: "par pièce", formats: ["Simple","Avec enveloppe","Luxe"] },
-  { id: "reliure", label: "Reliure / Plastification", desc: "Mémoires, dossiers, protection", iconName: "BookOpen", base: 1000, unit: "par document", formats: ["A4","A3","Spirale métal"] },
+  { id: "fairepart", label: "Faire-part / Invitations", desc: "Mariage, baptême, luxe dorure", iconName: "Heart", base: 200, unit: "par pièce", formats: ["Simple","Avec enveloppe","Luxe"] },
+  { id: "reliure", label: "Reliure / Plastification", desc: "Mémoires, dossiers, protection", iconName: "BookOpen", base: 300, unit: "par document", formats: ["A4","A3","Spirale métal"] },
 ];
 
 const DEFAULT_CONFIG: Config = {
@@ -65,51 +65,8 @@ function useConfig() {
       }
     } catch {}
   }, []);
-  const save = (next: Config) => {
-    setCfg(next);
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(next));
-  };
+  const save = (next: Config) => { setCfg(next); localStorage.setItem(STORAGE_KEY, JSON.stringify(next)); };
   return { cfg, save };
-}
-
-function usePWA() {
-  const [deferred, setDeferred] = useState<any>(null);
-  const [canInstall, setCanInstall] = useState(false);
-  const [installed, setInstalled] = useState(false);
-
-  useEffect(() => {
-    // Register SW
-    if ('serviceWorker' in navigator) {
-      navigator.serviceWorker.register('/sw.js').catch(()=>{});
-    }
-    const onBeforeInstall = (e: any) => {
-      e.preventDefault();
-      setDeferred(e);
-      setCanInstall(true);
-    };
-    const onInstalled = () => {
-      setInstalled(true);
-      setCanInstall(false);
-    };
-    window.addEventListener('beforeinstallprompt', onBeforeInstall);
-    window.addEventListener('appinstalled', onInstalled);
-    // check if already installed
-    if (window.matchMedia('(display-mode: standalone)').matches) setInstalled(true);
-    return () => {
-      window.removeEventListener('beforeinstallprompt', onBeforeInstall);
-      window.removeEventListener('appinstalled', onInstalled);
-    };
-  }, []);
-
-  const install = async () => {
-    if (!deferred) return;
-    deferred.prompt();
-    const { outcome } = await deferred.userChoice;
-    if (outcome === 'accepted') setCanInstall(false);
-    setDeferred(null);
-  };
-
-  return { canInstall, installed, install };
 }
 
 function AdminPanel({ cfg, save, onExit }: { cfg: Config; save: (c: Config) => void; onExit: () => void }) {
@@ -190,16 +147,28 @@ function AdminPanel({ cfg, save, onExit }: { cfg: Config; save: (c: Config) => v
 
 export default function App() {
   const { cfg, save } = useConfig();
-  const { canInstall, installed, install } = usePWA();
   const [showAdmin, setShowAdmin] = useState(false);
   const [pwd, setPwd] = useState("");
   const [pwdError, setPwdError] = useState(false);
   const [isAuthed, setIsAuthed] = useState(false);
+  const [deferredPrompt, setDeferredPrompt] = useState<any>(null);
+  const [showInstallHelp, setShowInstallHelp] = useState(false);
 
   useEffect(() => {
     const isAdmin = window.location.pathname.includes("admin") || window.location.search.includes("admin") || window.location.hash.includes("admin");
     if (isAdmin) setShowAdmin(true);
     if (localStorage.getItem("agbekoi_admin_auth") === "1") setIsAuthed(true);
+
+    // PWA install prompt capture
+    const handler = (e: any) => {
+      e.preventDefault();
+      setDeferredPrompt(e);
+    };
+    window.addEventListener('beforeinstallprompt', handler);
+    if ('serviceWorker' in navigator) {
+      navigator.serviceWorker.register('/sw.js').catch(()=>{});
+    }
+    return () => window.removeEventListener('beforeinstallprompt', handler);
   }, []);
 
   const [calcService, setCalcService] = useState(DEFAULT_SERVICES[2]);
@@ -235,6 +204,17 @@ export default function App() {
     setTimeout(() => setToast(null), 4000);
   }
 
+  const handleInstall = async () => {
+    if (deferredPrompt) {
+      deferredPrompt.prompt();
+      const { outcome } = await deferredPrompt.userChoice;
+      setDeferredPrompt(null);
+      if (outcome === 'accepted') setToast("✅ App installée !");
+    } else {
+      setShowInstallHelp(true);
+    }
+  };
+
   if (showAdmin) {
     if (!isAuthed) {
       return (
@@ -264,14 +244,11 @@ export default function App() {
           <div className="flex items-center gap-3">
             <div className="w-9 h-9 rounded-[12px] bg-black text-white grid place-items-center font-display font-[800]">A</div>
             <div className="font-display font-[800] text-[15px]">AGBEKOI PRINT</div>
-            {installed && <span className="ml-2 text-[10px] px-2 py-1 rounded-full bg-[#00D26A] text-white font-bold">APP INSTALLÉE</span>}
           </div>
           <div className="flex items-center gap-2">
-            {canInstall && (
-              <button onClick={install} className="h-9 px-4 rounded-full bg-[#FFC700] text-black font-bold text-[13px] flex items-center gap-2 animate-pulse">
-                <Download size={14}/> Installer l'App
-              </button>
-            )}
+            <button onClick={handleInstall} className="h-9 px-4 rounded-full bg-[#FFC700] text-black font-bold text-[12px] flex items-center gap-2">
+              <Download size={14}/> Installer
+            </button>
             <button onClick={() => setShowAdmin(true)} className="w-9 h-9 rounded-full bg-neutral-100 grid place-items-center"><Settings size={16}/></button>
             <a href={`https://wa.me/${cfg.whatsapp}`} target="_blank" className="hidden sm:flex h-9 px-4 rounded-full bg-black text-white text-[13px] font-semibold items-center gap-2"><Phone size={14}/> WhatsApp</a>
           </div>
@@ -286,11 +263,8 @@ export default function App() {
             <p className="mt-4 text-[15px] leading-6 opacity-70 max-w-[520px]">{cfg.heroSubtitle}</p>
             <div className="mt-6 flex flex-wrap gap-3">
               <button onClick={() => openWhatsApp("Bonjour Agbekoi Print, je veux commander")} className="h-12 px-6 rounded-full bg-black text-white font-semibold text-[14px] flex items-center gap-2">Commander sur WhatsApp <ArrowUpRight size={16}/></button>
-              {canInstall && (
-                <button onClick={install} className="h-12 px-6 rounded-full bg-white border-2 border-black font-bold text-[14px] flex items-center gap-2"><Download size={18}/> Installer comme App</button>
-              )}
+              <button onClick={handleInstall} className="h-12 px-6 rounded-full bg-white border-2 border-black font-bold text-[14px] flex items-center gap-2"><Smartphone size={18}/> Installer l'App</button>
             </div>
-            {installed && <div className="mt-4 text-[12px] p-3 rounded-xl bg-[#E8FFF1] border border-[#00D26A]/20 text-[#0A7A3E]">✅ Merci ! L'app est installée sur ton téléphone. Tu peux l'ouvrir depuis ton écran d'accueil.</div>}
           </div>
 
           <div className="bg-white rounded-[28px] border shadow p-5 sm:p-6">
@@ -338,16 +312,20 @@ export default function App() {
         <div>© Agbekoi Print • <button onClick={() => setShowAdmin(true)} className="underline">Admin</button> • App installable 📲</div>
       </footer>
 
-      {toast && <div className="fixed bottom-20 left-1/2 -translate-x-1/2 bg-black text-white px-4 py-2 rounded-full text-[12px]">{toast}</div>}
+      {toast && <div className="fixed bottom-20 left-1/2 -translate-x-1/2 bg-black text-white px-4 py-2 rounded-full text-[12px] z-50">{toast}</div>}
 
-      {/* Bannière mobile installer */}
-      {canInstall && (
-        <div className="fixed bottom-0 left-0 right-0 z-50 bg-black text-white p-4 flex items-center justify-between gap-3 sm:hidden">
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-xl bg-[#FFC700] grid place-items-center font-black text-black">A</div>
-            <div><div className="font-bold text-[13px] leading-none">Installer Agbekoi Print</div><div className="text-[11px] opacity-60">Accès rapide comme une app</div></div>
+      {showInstallHelp && (
+        <div className="fixed inset-0 z-[100] bg-black/60 backdrop-blur-sm grid place-items-center p-6">
+          <div className="bg-white rounded-[24px] p-6 max-w-[360px] w-full">
+            <div className="w-12 h-12 rounded-xl bg-[#FFC700] grid place-items-center"><Smartphone size={24}/></div>
+            <h3 className="mt-4 font-bold text-[18px]">Installer Agbekoi Print</h3>
+            <div className="mt-4 space-y-3 text-[13px] leading-5">
+              <div><b>Sur Android Chrome :</b><br/>Clique les 3 points ⋮ en haut → <b>Installer l'application</b> ou <b>Ajouter à l'écran d'accueil</b></div>
+              <div><b>Sur iPhone Safari :</b><br/>Clique le bouton Partage <Share size={12} className="inline"/> en bas → <b>Sur l'écran d'accueil</b></div>
+              <div><b>Sur PC :</b><br/>Dans la barre d'adresse, clique l'icône <Download size={12} className="inline"/> <b>Installer</b> à droite, ou dans le menu ⋮ → Installer Agbekoi Print</div>
+            </div>
+            <button onClick={() => setShowInstallHelp(false)} className="mt-6 w-full h-11 rounded-full bg-black text-white font-semibold">J'ai compris</button>
           </div>
-          <button onClick={install} className="h-10 px-5 rounded-full bg-[#FFC700] text-black font-bold text-[13px]">Installer</button>
         </div>
       )}
     </div>
