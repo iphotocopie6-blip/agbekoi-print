@@ -1,8 +1,9 @@
 import { useState, useMemo, useEffect } from "react";
 import {
   Printer, Flag, CreditCard, FileText, Shirt, Sticker, Heart, BookOpen,
-  Calculator, Sparkles, Settings, Save, Eye, DollarSign, Type, Lock,
-  ArrowUpRight, MessageCircle, Phone, Download, Bell
+  Zap, Award, Wallet, Truck, MessageCircle, Phone, MapPin, Clock,
+  ArrowUpRight, Check, Calculator, Sparkles, Upload, X, Settings,
+  Save, Eye, DollarSign, Type, Lock
 } from "lucide-react";
 
 type Service = {
@@ -29,10 +30,10 @@ const DEFAULT_SERVICES: Service[] = [
   { id: "bache", label: "Bâche / Bandéroles", desc: "Résistante, œillets inclus, extérieur", iconName: "Flag", base: 6500, unit: "par m²", formats: ["1m²","2m²","3m²","6m²"] },
   { id: "carte", label: "Cartes de visite", desc: "Recto/verso, pelliculage mat soft-touch", iconName: "CreditCard", base: 15000, unit: "les 100", formats: ["Standard","Premium","Luxe"] },
   { id: "flyer", label: "Flyers / Dépliants", desc: "A5, A4 pliés, distribution efficace", iconName: "FileText", base: 12000, unit: "les 100", formats: ["A5","A4","A4 plié"] },
-  { id: "tshirt", label: "T-shirts / Personnalisation", desc: "Sérigraphie, DTG, flocage pro", iconName: "Shirt", base: 5500, unit: "par pièce", formats: ["S-M-L","XL-XXL","Enfant"] },
+  { id: "tshirt", label: "T-shirts / Personnalisation", desc: "Sérigraphie, DTG, flocage pro", iconName: "Shirt", base: 2000, unit: "par pièce", formats: ["S-M-L","XL-XXL","Enfant"] },
   { id: "vinyle", label: "Autocollants / Vinyle", desc: "Découpe, impression véhicule", iconName: "Sticker", base: 2000, unit: "par planche A3", formats: ["A3","A2","Découpe"] },
-  { id: "fairepart", label: "Faire-part / Invitations", desc: "Mariage, baptême, luxe dorure", iconName: "Heart", base: 500, unit: "par pièce", formats: ["Simple","Avec enveloppe","Luxe"] },
-  { id: "reliure", label: "Reliure / Plastification", desc: "Mémoires, dossiers, protection", iconName: "BookOpen", base: 1000, unit: "par document", formats: ["A4","A3","Spirale métal"] },
+  { id: "fairepart", label: "Faire-part / Invitations", desc: "Mariage, baptême, luxe dorure", iconName: "Heart", base: 200, unit: "par pièce", formats: ["Simple","Avec enveloppe","Luxe"] },
+  { id: "reliure", label: "Reliure / Plastification", desc: "Mémoires, dossiers, protection", iconName: "BookOpen", base: 300, unit: "par document", formats: ["A4","A3","Spirale métal"] },
 ];
 
 const DEFAULT_CONFIG: Config = {
@@ -72,119 +73,23 @@ function useConfig() {
   return { cfg, save };
 }
 
-
-function useNotifications() {
-  const [items, setItems] = useState<any[]>(() => {
-    try { return JSON.parse(localStorage.getItem("agbekoi_notifs")||"[]"); } catch { return []; }
-  });
-  const [permission, setPermission] = useState<NotificationPermission>('default');
-  
-  useEffect(() => {
-    if ('Notification' in window) setPermission(Notification.permission);
-  }, []);
-
-  const requestPerm = async () => {
-    if ('Notification' in window) {
-      const p = await Notification.requestPermission();
-      setPermission(p);
-      return p;
-    }
-    return 'denied';
-  };
-
-  const push = (title: string, body: string) => {
-    const now = new Date();
-    const n = { id: Date.now(), title, body, time: now.toLocaleString('fr-FR'), read: false };
-    const next = [n, ...items].slice(0, 20);
-    setItems(next);
-    localStorage.setItem("agbekoi_notifs", JSON.stringify(next));
-    
-    // Browser notification
-    if (permission === 'granted' && 'Notification' in window) {
-      try { new Notification(title, { body, icon: 'https://cdn-icons-png.flaticon.com/512/1055/1055666.png' }); } catch {}
-    }
-    
-    // Also vibration if mobile
-    if ('vibrate' in navigator) { try { navigator.vibrate([200, 100, 200]); } catch {} }
-  };
-
-  const markAllRead = () => {
-    const next = items.map((i:any)=>({...i, read:true}));
-    setItems(next);
-    localStorage.setItem("agbekoi_notifs", JSON.stringify(next));
-  };
-
-  const unread = items.filter((i:any)=>!i.read).length;
-
-  return { items, push, permission, requestPerm, unread, markAllRead };
-}
-
-function usePWA() {
-
-  const [deferred, setDeferred] = useState<any>(null);
-  const [canInstall, setCanInstall] = useState(false);
-  const [installed, setInstalled] = useState(false);
-
-  useEffect(() => {
-    // Register SW
-    if ('serviceWorker' in navigator) {
-      navigator.serviceWorker.register('/sw.js').catch(()=>{});
-    }
-    const onBeforeInstall = (e: any) => {
-      e.preventDefault();
-      setDeferred(e);
-      setCanInstall(true);
-    };
-    const onInstalled = () => {
-      setInstalled(true);
-      setCanInstall(false);
-    };
-    window.addEventListener('beforeinstallprompt', onBeforeInstall);
-    window.addEventListener('appinstalled', onInstalled);
-    // check if already installed
-    if (window.matchMedia('(display-mode: standalone)').matches) setInstalled(true);
-    return () => {
-      window.removeEventListener('beforeinstallprompt', onBeforeInstall);
-      window.removeEventListener('appinstalled', onInstalled);
-    };
-  }, []);
-
-  const install = async () => {
-    if (!deferred) return;
-    deferred.prompt();
-    const { outcome } = await deferred.userChoice;
-    if (outcome === 'accepted') setCanInstall(false);
-    setDeferred(null);
-  };
-
-  return { canInstall, installed, install };
-}
-
 function AdminPanel({ cfg, save, onExit }: { cfg: Config; save: (c: Config) => void; onExit: () => void }) {
   const [local, setLocal] = useState<Config>(cfg);
   const [tab, setTab] = useState<"prix" | "textes" | "whatsapp">("prix");
   const [toast, setToast] = useState<string | null>(null);
+
   useEffect(() => { setLocal(cfg); }, [cfg]);
+
   const doSave = () => {
-    // detect changes
-    const changes: string[] = [];
-    cfg.services.forEach((oldS: any) => {
-      const newS = local.services.find((s:any)=>s.id===oldS.id);
-      if (newS && newS.base !== oldS.base) changes.push(`${newS.label}: ${oldS.base}F → ${newS.base}F`);
-    });
-    if (local.whatsapp !== cfg.whatsapp) changes.push(`WhatsApp: ${cfg.whatsapp} → ${local.whatsapp}`);
     save(local);
-    // notifications
-    try {
-      const evt = new CustomEvent('agbekoi-notif', { detail: { changes } });
-      window.dispatchEvent(evt);
-    } catch {}
-    setToast("✅ Enregistré ! Notifications envoyées.");
+    setToast("✅ Enregistré ! Le site est à jour.");
     setTimeout(() => setToast(null), 3000);
   };
+
   const updateService = (id: string, field: keyof Service, value: any) => {
     setLocal(l => ({ ...l, services: l.services.map(s => s.id === id ? { ...s, [field]: value } : s) }));
   };
+
   return (
     <div className="min-h-screen bg-[#f6f5f0] text-neutral-900">
       <header className="sticky top-0 z-20 bg-black text-white h-[64px] flex items-center justify-between px-6">
@@ -197,12 +102,14 @@ function AdminPanel({ cfg, save, onExit }: { cfg: Config; save: (c: Config) => v
           <button onClick={doSave} className="h-9 px-4 rounded-full bg-[#FFC700] text-black font-semibold flex items-center gap-2 text-[13px]"><Save size={14}/> Enregistrer</button>
         </div>
       </header>
+
       <div className="max-w-[1100px] mx-auto p-6 grid lg:grid-cols-[200px_1fr] gap-6">
         <nav className="space-y-2">
           <button onClick={() => setTab("prix")} className={`w-full h-11 px-4 rounded-xl flex items-center gap-3 text-[14px] font-medium text-left ${tab === "prix" ? "bg-black text-white" : "bg-white border"}`}><DollarSign size={16}/> Prix & Services</button>
           <button onClick={() => setTab("textes")} className={`w-full h-11 px-4 rounded-xl flex items-center gap-3 text-[14px] font-medium text-left ${tab === "textes" ? "bg-black text-white" : "bg-white border"}`}><Type size={16}/> Textes</button>
           <button onClick={() => setTab("whatsapp")} className={`w-full h-11 px-4 rounded-xl flex items-center gap-3 text-[14px] font-medium text-left ${tab === "whatsapp" ? "bg-black text-white" : "bg-white border"}`}><MessageCircle size={16}/> WhatsApp</button>
         </nav>
+
         <div className="bg-white rounded-[20px] border p-6 shadow-sm min-h-[600px]">
           {tab === "prix" && (
             <div className="space-y-4">
@@ -223,6 +130,7 @@ function AdminPanel({ cfg, save, onExit }: { cfg: Config; save: (c: Config) => v
               </div>
             </div>
           )}
+
           {tab === "textes" && (
             <div className="space-y-6">
               <h2 className="font-bold text-[20px]">Textes</h2>
@@ -232,6 +140,7 @@ function AdminPanel({ cfg, save, onExit }: { cfg: Config; save: (c: Config) => v
               <label className="space-y-1 block"><div className="text-[12px] font-semibold opacity-60">SOUS-TITRE</div><textarea value={local.heroSubtitle} onChange={e => setLocal({ ...local, heroSubtitle: e.target.value })} className="w-full p-4 rounded-xl border min-h-[80px]"/></label>
             </div>
           )}
+
           {tab === "whatsapp" && (
             <div className="space-y-6">
               <h2 className="font-bold text-[20px]">WhatsApp</h2>
@@ -241,6 +150,7 @@ function AdminPanel({ cfg, save, onExit }: { cfg: Config; save: (c: Config) => v
               </label>
             </div>
           )}
+
           <div className="mt-10 pt-6 border-t flex gap-3">
             <button onClick={doSave} className="h-11 px-6 rounded-full bg-black text-white font-semibold flex items-center gap-2"><Save size={16}/> Enregistrer</button>
             <button onClick={() => { if (confirm("Réinitialiser?")) { localStorage.removeItem(STORAGE_KEY); location.reload(); } }} className="h-11 px-6 rounded-full border font-medium">Réinitialiser</button>
@@ -254,24 +164,6 @@ function AdminPanel({ cfg, save, onExit }: { cfg: Config; save: (c: Config) => v
 
 export default function App() {
   const { cfg, save } = useConfig();
-  const { canInstall, installed, install } = usePWA();
-  const { items: notifs, push, permission, requestPerm, unread, markAllRead } = useNotifications();
-  const [showNotifs, setShowNotifs] = useState(false);
-
-  // Listen to admin save event
-  useEffect(() => {
-    const handler = (e: any) => {
-      const changes = e.detail?.changes || [];
-      if (changes.length === 0) {
-        push("Agbekoi Print modifié ✅", "Configuration mise à jour avec succès");
-      } else {
-        push("Prix modifiés 📢", changes.join(", ").slice(0, 120));
-      }
-    };
-    window.addEventListener('agbekoi-notif', handler as any);
-    return () => window.removeEventListener('agbekoi-notif', handler as any);
-  }, [push]);
-
   const [showAdmin, setShowAdmin] = useState(false);
   const [pwd, setPwd] = useState("");
   const [pwdError, setPwdError] = useState(false);
@@ -288,6 +180,7 @@ export default function App() {
   const [calcFormat, setCalcFormat] = useState(DEFAULT_SERVICES[2].formats[0]);
   const [fini, setFini] = useState("Mat");
   const [toast, setToast] = useState<string | null>(null);
+  const [waMsg, setWaMsg] = useState<string | null>(null);
 
   useEffect(() => {
     setCalcService(cfg.services[2] || cfg.services[0]);
@@ -311,6 +204,7 @@ export default function App() {
 
   function openWhatsApp(message: string) {
     const url = `${WA_LINK_BASE}?text=${encodeURIComponent(message)}`;
+    setWaMsg(message);
     setToast("WhatsApp prêt");
     try { window.open(url, "_blank"); } catch {}
     setTimeout(() => setToast(null), 4000);
@@ -345,18 +239,8 @@ export default function App() {
           <div className="flex items-center gap-3">
             <div className="w-9 h-9 rounded-[12px] bg-black text-white grid place-items-center font-display font-[800]">A</div>
             <div className="font-display font-[800] text-[15px]">AGBEKOI PRINT</div>
-            {installed && <span className="ml-2 text-[10px] px-2 py-1 rounded-full bg-[#00D26A] text-white font-bold">APP INSTALLÉE</span>}
           </div>
           <div className="flex items-center gap-2">
-            {canInstall && (
-              <button onClick={install} className="h-9 px-4 rounded-full bg-[#FFC700] text-black font-bold text-[13px] flex items-center gap-2 animate-pulse">
-                <Download size={14}/> Installer
-              </button>
-            )}
-            <button onClick={() => { setShowNotifs(!showNotifs); if(unread>0) setTimeout(()=>markAllRead(), 2000); }} className="relative w-9 h-9 rounded-full bg-neutral-100 grid place-items-center">
-              <Bell size={16}/>
-              {unread>0 && <span className="absolute -top-1 -right-1 w-5 h-5 bg-red-500 text-white text-[10px] font-bold rounded-full grid place-items-center">{unread}</span>}
-            </button>
             <button onClick={() => setShowAdmin(true)} className="w-9 h-9 rounded-full bg-neutral-100 grid place-items-center"><Settings size={16}/></button>
             <a href={`https://wa.me/${cfg.whatsapp}`} target="_blank" className="hidden sm:flex h-9 px-4 rounded-full bg-black text-white text-[13px] font-semibold items-center gap-2"><Phone size={14}/> WhatsApp</a>
           </div>
@@ -366,16 +250,12 @@ export default function App() {
       <section className="bg-[#FFFEF5] border-b border-black/5">
         <div className="max-w-[1240px] mx-auto px-5 sm:px-8 py-10 sm:py-16 grid lg:grid-cols-[1.1fr_0.9fr] gap-10 items-center">
           <div>
-            <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-black text-white text-[11px] font-semibold"><Sparkles size={12} className="text-[#FFC700]" /> {cfg.badge}</div>
+            <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-black text-white text-[11px] font-semibold"><Sparkles size={12} className="text-[#FFC700"/> {cfg.badge}</div>
             <h1 className="mt-4 font-display font-[800] text-[42px] sm:text-[56px] leading-[0.9] tracking-tight">{cfg.heroTitle1}<br/><span className="bg-[#FFC700] px-2">{cfg.heroTitle2}</span></h1>
             <p className="mt-4 text-[15px] leading-6 opacity-70 max-w-[520px]">{cfg.heroSubtitle}</p>
             <div className="mt-6 flex flex-wrap gap-3">
               <button onClick={() => openWhatsApp("Bonjour Agbekoi Print, je veux commander")} className="h-12 px-6 rounded-full bg-black text-white font-semibold text-[14px] flex items-center gap-2">Commander sur WhatsApp <ArrowUpRight size={16}/></button>
-              {canInstall && (
-                <button onClick={install} className="h-12 px-6 rounded-full bg-white border-2 border-black font-bold text-[14px] flex items-center gap-2"><Download size={18}/> Installer comme App</button>
-              )}
             </div>
-            {installed && <div className="mt-4 text-[12px] p-3 rounded-xl bg-[#E8FFF1] border border-[#00D26A]/20 text-[#0A7A3E]">✅ Merci ! L'app est installée sur ton téléphone. Tu peux l'ouvrir depuis ton écran d'accueil.</div>}
           </div>
 
           <div className="bg-white rounded-[28px] border shadow p-5 sm:p-6">
@@ -419,49 +299,11 @@ export default function App() {
         </div>
       </section>
 
-      {/* NOTIFICATIONS PANEL */}
-      {showNotifs && (
-        <div className="fixed top-[70px] right-5 z-50 w-[360px] max-w-[90vw] bg-white rounded-[20px] border shadow-[0_20px_60px_rgba(0,0,0,0.2)] overflow-hidden animate-[fadeIn_0.2s]">
-          <div className="p-4 border-b flex items-center justify-between">
-            <div className="font-bold flex items-center gap-2"><Bell size={16}/> Notifications {unread>0 && <span className="text-[11px] px-2 py-0.5 rounded-full bg-red-500 text-white">{unread} new</span>}</div>
-            <button onClick={()=>setShowNotifs(false)} className="w-8 h-8 rounded-full bg-neutral-100 grid place-items-center"><X size={14}/></button>
-          </div>
-          <div className="max-h-[400px] overflow-auto">
-            {permission !== 'granted' && (
-              <div className="m-3 p-3 rounded-xl bg-[#FFFBEB] border border-[#FFC700]/30 text-[12px]">
-                <div className="font-semibold">Activer les notifications ?</div>
-                <div className="opacity-70 mt-1">Reçois une alerte à chaque modification de prix.</div>
-                <button onClick={async()=>{ const p=await requestPerm(); if(p==='granted') push("Notifications activées 🔔", "Tu seras notifié à chaque changement"); }} className="mt-2 h-8 px-4 rounded-full bg-black text-white text-[12px] font-semibold">Activer</button>
-              </div>
-            )}
-            {notifs.length===0 && <div className="p-8 text-center text-[13px] opacity-50">Aucune notification pour le moment.<br/>Modifie un prix dans l'admin pour tester.</div>}
-            {notifs.map((n:any)=>(
-              <div key={n.id} className={`p-4 border-b last:border-0 ${!n.read?'bg-[#FFFBEB]/50':''}`}>
-                <div className="font-semibold text-[13px]">{n.title}</div>
-                <div className="text-[12px] opacity-70 mt-1">{n.body}</div>
-                <div className="text-[10px] opacity-40 mt-2">{n.time}</div>
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
-
       <footer className="bg-black text-white py-10 text-center text-[12px]">
-        <div>© Agbekoi Print • <button onClick={() => setShowAdmin(true)} className="underline">Admin</button> • App installable 📲</div>
+        <div>© Agbekoi Print • <button onClick={() => setShowAdmin(true)} className="underline">Admin</button> • agbekoi123</div>
       </footer>
 
       {toast && <div className="fixed bottom-20 left-1/2 -translate-x-1/2 bg-black text-white px-4 py-2 rounded-full text-[12px]">{toast}</div>}
-
-      {/* Bannière mobile installer */}
-      {canInstall && (
-        <div className="fixed bottom-0 left-0 right-0 z-50 bg-black text-white p-4 flex items-center justify-between gap-3 sm:hidden">
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-xl bg-[#FFC700] grid place-items-center font-black text-black">A</div>
-            <div><div className="font-bold text-[13px] leading-none">Installer Agbekoi Print</div><div className="text-[11px] opacity-60">Accès rapide comme une app</div></div>
-          </div>
-          <button onClick={install} className="h-10 px-5 rounded-full bg-[#FFC700] text-black font-bold text-[13px]">Installer</button>
-        </div>
-      )}
     </div>
   );
 }
