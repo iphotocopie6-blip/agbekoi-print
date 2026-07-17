@@ -1,29 +1,12 @@
 import { useState, useMemo, useEffect } from "react";
 import {
   Printer, Flag, CreditCard, FileText, Shirt, Sticker, Heart, BookOpen,
-  Zap, Award, Wallet, Truck, MessageCircle, Phone, MapPin, Clock,
-  ArrowUpRight, Check, Calculator, Sparkles, Upload, X, Settings,
-  Save, Eye, DollarSign, Type, Lock
+  Calculator, Sparkles, Settings, Save, Eye, DollarSign, Type, Lock,
+  ArrowUpRight, MessageCircle, Phone, Download, Bell, X, Share, Smartphone
 } from "lucide-react";
 
-type Service = {
-  id: string;
-  label: string;
-  desc: string;
-  iconName: string;
-  base: number;
-  unit: string;
-  formats: string[];
-};
-
-type Config = {
-  whatsapp: string;
-  heroTitle1: string;
-  heroTitle2: string;
-  heroSubtitle: string;
-  services: Service[];
-  badge: string;
-};
+type Service = { id: string; label: string; desc: string; iconName: string; base: number; unit: string; formats: string[]; };
+type Config = { whatsapp: string; heroTitle1: string; heroTitle2: string; heroSubtitle: string; services: Service[]; badge: string; };
 
 const DEFAULT_SERVICES: Service[] = [
   { id: "affiche", label: "Impression Affiche", desc: "A3, A2, A1, A0 - Papier photo ou mat", iconName: "Printer", base: 2500, unit: "par affiche", formats: ["A3","A2","A1","A0"] },
@@ -46,115 +29,50 @@ const DEFAULT_CONFIG: Config = {
 };
 
 const STORAGE_KEY = "agbekoi_config_v2";
+const NOTIF_KEY = "agbekoi_notifs";
 const ADMIN_PWD = "agbekoi123";
 const iconMap: Record<string, any> = { Printer, Flag, CreditCard, FileText, Shirt, Sticker, Heart, BookOpen };
-const formatFactors: Record<string, number> = {
-  A5: 0.7, A4: 1, "A4 plié": 1.3, A3: 1.8, A2: 3, A1: 5, A0: 8,
-  "1m²": 1, "2m²": 1.9, "3m²": 2.7, "6m²": 5,
-  Standard: 1, Premium: 1.4, Luxe: 2, "Avec enveloppe": 1.6, Simple: 1,
-  "S-M-L": 1, "XL-XXL": 1.2, Enfant: 0.85, Découpe: 1.3, "Spirale métal": 1.5,
-};
+const formatFactors: Record<string, number> = { A5: 0.7, A4: 1, "A4 plié": 1.3, A3: 1.8, A2: 3, A1: 5, A0: 8, "1m²": 1, "2m²": 1.9, "3m²": 2.7, "6m²": 5, Standard: 1, Premium: 1.4, Luxe: 2, "Avec enveloppe": 1.6, Simple: 1, "S-M-L": 1, "XL-XXL": 1.2, Enfant: 0.85, Découpe: 1.3, "Spirale métal": 1.5 };
 
 function useConfig() {
   const [cfg, setCfg] = useState<Config>(DEFAULT_CONFIG);
-  useEffect(() => {
-    try {
-      const raw = localStorage.getItem(STORAGE_KEY);
-      if (raw) {
-        const parsed = JSON.parse(raw);
-        setCfg({ ...DEFAULT_CONFIG, ...parsed, services: parsed.services || DEFAULT_SERVICES });
-      }
-    } catch {}
-  }, []);
-  const save = (next: Config) => {
-    setCfg(next);
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(next));
-  };
+  useEffect(() => { try { const raw = localStorage.getItem(STORAGE_KEY); if (raw) { const p = JSON.parse(raw); setCfg({ ...DEFAULT_CONFIG, ...p, services: p.services || DEFAULT_SERVICES }); } } catch {} }, []);
+  const save = (next: Config) => { setCfg(next); localStorage.setItem(STORAGE_KEY, JSON.stringify(next)); };
   return { cfg, save };
 }
 
-function AdminPanel({ cfg, save, onExit }: { cfg: Config; save: (c: Config) => void; onExit: () => void }) {
+function AdminPanel({ cfg, save, onExit, onNotify }: { cfg: Config; save: (c: Config) => void; onExit: () => void; onNotify: (t: string, b: string) => void }) {
   const [local, setLocal] = useState<Config>(cfg);
   const [tab, setTab] = useState<"prix" | "textes" | "whatsapp">("prix");
   const [toast, setToast] = useState<string | null>(null);
-
   useEffect(() => { setLocal(cfg); }, [cfg]);
-
   const doSave = () => {
+    const changes: string[] = [];
+    cfg.services.forEach((oldS: any) => { const ns = local.services.find((s: any) => s.id === oldS.id); if (ns && ns.base !== oldS.base) changes.push(`${ns.label}: ${oldS.base} → ${ns.base}F`); });
     save(local);
-    setToast("✅ Enregistré ! Le site est à jour.");
+    if (changes.length > 0) onNotify("Prix modifiés 📢", changes.join(", "));
+    else onNotify("Modifications enregistrées ✅", "Site mis à jour");
+    setToast("✅ Enregistré + Notification envoyée !");
     setTimeout(() => setToast(null), 3000);
   };
-
-  const updateService = (id: string, field: keyof Service, value: any) => {
-    setLocal(l => ({ ...l, services: l.services.map(s => s.id === id ? { ...s, [field]: value } : s) }));
-  };
-
+  const updateService = (id: string, field: keyof Service, value: any) => { setLocal(l => ({ ...l, services: l.services.map(s => s.id === id ? { ...s, [field]: value } : s) })); };
   return (
     <div className="min-h-screen bg-[#f6f5f0] text-neutral-900">
       <header className="sticky top-0 z-20 bg-black text-white h-[64px] flex items-center justify-between px-6">
-        <div className="flex items-center gap-3">
-          <div className="w-9 h-9 rounded-xl bg-[#FFC700] text-black grid place-items-center font-black">A</div>
-          <div><div className="font-bold leading-none">AGBEKOI ADMIN</div><div className="text-[11px] opacity-60">Tableau de bord</div></div>
-        </div>
-        <div className="flex gap-2">
-          <button onClick={onExit} className="h-9 px-4 rounded-full bg-white/10 flex items-center gap-2 text-[13px]"><Eye size={14}/> Voir site</button>
-          <button onClick={doSave} className="h-9 px-4 rounded-full bg-[#FFC700] text-black font-semibold flex items-center gap-2 text-[13px]"><Save size={14}/> Enregistrer</button>
-        </div>
+        <div className="flex items-center gap-3"><div className="w-9 h-9 rounded-xl bg-[#FFC700] text-black grid place-items-center font-black">A</div><div><div className="font-bold leading-none">AGBEKOI ADMIN</div><div className="text-[11px] opacity-60">Tableau de bord + Notifs</div></div></div>
+        <div className="flex gap-2"><button onClick={onExit} className="h-9 px-4 rounded-full bg-white/10 flex items-center gap-2 text-[13px]"><Eye size={14}/> Voir site</button><button onClick={doSave} className="h-9 px-4 rounded-full bg-[#FFC700] text-black font-semibold flex items-center gap-2 text-[13px]"><Save size={14}/> Enregistrer</button></div>
       </header>
-
       <div className="max-w-[1100px] mx-auto p-6 grid lg:grid-cols-[200px_1fr] gap-6">
         <nav className="space-y-2">
           <button onClick={() => setTab("prix")} className={`w-full h-11 px-4 rounded-xl flex items-center gap-3 text-[14px] font-medium text-left ${tab === "prix" ? "bg-black text-white" : "bg-white border"}`}><DollarSign size={16}/> Prix & Services</button>
           <button onClick={() => setTab("textes")} className={`w-full h-11 px-4 rounded-xl flex items-center gap-3 text-[14px] font-medium text-left ${tab === "textes" ? "bg-black text-white" : "bg-white border"}`}><Type size={16}/> Textes</button>
           <button onClick={() => setTab("whatsapp")} className={`w-full h-11 px-4 rounded-xl flex items-center gap-3 text-[14px] font-medium text-left ${tab === "whatsapp" ? "bg-black text-white" : "bg-white border"}`}><MessageCircle size={16}/> WhatsApp</button>
         </nav>
-
         <div className="bg-white rounded-[20px] border p-6 shadow-sm min-h-[600px]">
-          {tab === "prix" && (
-            <div className="space-y-4">
-              <h2 className="font-bold text-[20px]">Gérer les prix</h2>
-              <div className="grid gap-3">
-                {local.services.map(s => (
-                  <div key={s.id} className="rounded-2xl border p-4 flex flex-col sm:flex-row gap-4 sm:items-center justify-between">
-                    <div className="flex-1">
-                      <input value={s.label} onChange={e => updateService(s.id, "label", e.target.value)} className="font-semibold bg-transparent border-b border-transparent focus:border-black outline-none w-full"/>
-                      <div className="text-[11px] mt-1 opacity-50">{s.unit}</div>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <input type="number" value={s.base} onChange={e => updateService(s.id, "base", parseInt(e.target.value) || 0)} className="w-[130px] h-11 px-3 rounded-xl border-2 border-black font-bold text-[16px]"/>
-                      <span className="text-[11px]">F</span>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
-
-          {tab === "textes" && (
-            <div className="space-y-6">
-              <h2 className="font-bold text-[20px]">Textes</h2>
-              <label className="space-y-1 block"><div className="text-[12px] font-semibold opacity-60">BADGE</div><input value={local.badge} onChange={e => setLocal({ ...local, badge: e.target.value })} className="w-full h-11 px-4 rounded-xl border"/></label>
-              <label className="space-y-1 block"><div className="text-[12px] font-semibold opacity-60">TITRE 1</div><input value={local.heroTitle1} onChange={e => setLocal({ ...local, heroTitle1: e.target.value })} className="w-full h-11 px-4 rounded-xl border font-bold"/></label>
-              <label className="space-y-1 block"><div className="text-[12px] font-semibold opacity-60">TITRE 2</div><input value={local.heroTitle2} onChange={e => setLocal({ ...local, heroTitle2: e.target.value })} className="w-full h-11 px-4 rounded-xl border"/></label>
-              <label className="space-y-1 block"><div className="text-[12px] font-semibold opacity-60">SOUS-TITRE</div><textarea value={local.heroSubtitle} onChange={e => setLocal({ ...local, heroSubtitle: e.target.value })} className="w-full p-4 rounded-xl border min-h-[80px]"/></label>
-            </div>
-          )}
-
-          {tab === "whatsapp" && (
-            <div className="space-y-6">
-              <h2 className="font-bold text-[20px]">WhatsApp</h2>
-              <label className="space-y-2 block">
-                <div className="text-[12px] font-semibold opacity-60">NUMÉRO (ex: 2250546721249)</div>
-                <input value={local.whatsapp} onChange={e => setLocal({ ...local, whatsapp: e.target.value })} className="w-full h-12 px-4 rounded-xl border-2 border-black font-mono font-bold text-[16px]"/>
-              </label>
-            </div>
-          )}
-
-          <div className="mt-10 pt-6 border-t flex gap-3">
-            <button onClick={doSave} className="h-11 px-6 rounded-full bg-black text-white font-semibold flex items-center gap-2"><Save size={16}/> Enregistrer</button>
-            <button onClick={() => { if (confirm("Réinitialiser?")) { localStorage.removeItem(STORAGE_KEY); location.reload(); } }} className="h-11 px-6 rounded-full border font-medium">Réinitialiser</button>
-          </div>
+          {tab === "prix" && (<div className="space-y-4"><h2 className="font-bold text-[20px]">Gérer les prix - avec notif auto</h2><div className="grid gap-3">{local.services.map(s => (<div key={s.id} className="rounded-2xl border p-4 flex flex-col sm:flex-row gap-4 sm:items-center justify-between"><div className="flex-1"><input value={s.label} onChange={e => updateService(s.id, "label", e.target.value)} className="font-semibold bg-transparent border-b border-transparent focus:border-black outline-none w-full"/><div className="text-[11px] mt-1 opacity-50">{s.unit}</div></div><div className="flex items-center gap-2"><input type="number" value={s.base} onChange={e => updateService(s.id, "base", parseInt(e.target.value) || 0)} className="w-[130px] h-11 px-3 rounded-xl border-2 border-black font-bold text-[16px]"/><span className="text-[11px]">F</span></div></div>))}</div></div>)}
+          {tab === "textes" && (<div className="space-y-6"><h2 className="font-bold text-[20px]">Textes</h2><label className="space-y-1 block"><div className="text-[12px] font-semibold opacity-60">BADGE</div><input value={local.badge} onChange={e => setLocal({ ...local, badge: e.target.value })} className="w-full h-11 px-4 rounded-xl border"/></label><label className="space-y-1 block"><div className="text-[12px] font-semibold opacity-60">TITRE 1</div><input value={local.heroTitle1} onChange={e => setLocal({ ...local, heroTitle1: e.target.value })} className="w-full h-11 px-4 rounded-xl border font-bold"/></label><label className="space-y-1 block"><div className="text-[12px] font-semibold opacity-60">TITRE 2</div><input value={local.heroTitle2} onChange={e => setLocal({ ...local, heroTitle2: e.target.value })} className="w-full h-11 px-4 rounded-xl border"/></label><label className="space-y-1 block"><div className="text-[12px] font-semibold opacity-60">SOUS-TITRE</div><textarea value={local.heroSubtitle} onChange={e => setLocal({ ...local, heroSubtitle: e.target.value })} className="w-full p-4 rounded-xl border min-h-[80px]"/></label></div>)}
+          {tab === "whatsapp" && (<div className="space-y-6"><h2 className="font-bold text-[20px]">WhatsApp</h2><label className="space-y-2 block"><div className="text-[12px] font-semibold opacity-60">NUMÉRO</div><input value={local.whatsapp} onChange={e => setLocal({ ...local, whatsapp: e.target.value })} className="w-full h-12 px-4 rounded-xl border-2 border-black font-mono font-bold text-[16px]"/></label></div>)}
+          <div className="mt-10 pt-6 border-t flex gap-3"><button onClick={doSave} className="h-11 px-6 rounded-full bg-black text-white font-semibold flex items-center gap-2"><Save size={16}/> Enregistrer + Notifier</button><button onClick={() => { if (confirm("Réinitialiser?")) { localStorage.removeItem(STORAGE_KEY); location.reload(); } }} className="h-11 px-6 rounded-full border font-medium">Réinitialiser</button></div>
         </div>
       </div>
       {toast && <div className="fixed bottom-6 left-1/2 -translate-x-1/2 bg-black text-white px-5 py-3 rounded-full text-[13px]">{toast}</div>}
@@ -168,47 +86,54 @@ export default function App() {
   const [pwd, setPwd] = useState("");
   const [pwdError, setPwdError] = useState(false);
   const [isAuthed, setIsAuthed] = useState(false);
+  const [deferredPrompt, setDeferredPrompt] = useState<any>(null);
+  const [showInstallHelp, setShowInstallHelp] = useState(false);
+  const [showNotifs, setShowNotifs] = useState(false);
+  const [notifs, setNotifs] = useState<any[]>(() => { try { return JSON.parse(localStorage.getItem(NOTIF_KEY) || "[]"); } catch { return []; } });
+  const [toast, setToast] = useState<string | null>(null);
+
+  const pushNotif = (title: string, body: string) => {
+    const n = { id: Date.now(), title, body, time: new Date().toLocaleString('fr-FR'), read: false };
+    const next = [n, ...notifs].slice(0, 20);
+    setNotifs(next);
+    localStorage.setItem(NOTIF_KEY, JSON.stringify(next));
+    setToast(title);
+    setTimeout(() => setToast(null), 4000);
+    if ('vibrate' in navigator) try { navigator.vibrate([200, 100, 200]); } catch {}
+    if ('Notification' in window && Notification.permission === 'granted') {
+      try { new Notification(title, { body, icon: 'https://cdn-icons-png.flaticon.com/512/1055/1055666.png' }); } catch {}
+    }
+  };
 
   useEffect(() => {
     const isAdmin = window.location.pathname.includes("admin") || window.location.search.includes("admin") || window.location.hash.includes("admin");
     if (isAdmin) setShowAdmin(true);
     if (localStorage.getItem("agbekoi_admin_auth") === "1") setIsAuthed(true);
+    const h = (e: any) => { e.preventDefault(); setDeferredPrompt(e); };
+    window.addEventListener('beforeinstallprompt', h);
+    return () => window.removeEventListener('beforeinstallprompt', h);
   }, []);
 
   const [calcService, setCalcService] = useState(DEFAULT_SERVICES[2]);
   const [calcQty, setCalcQty] = useState(100);
   const [calcFormat, setCalcFormat] = useState(DEFAULT_SERVICES[2].formats[0]);
-  const [fini, setFini] = useState("Mat");
-  const [toast, setToast] = useState<string | null>(null);
-  const [waMsg, setWaMsg] = useState<string | null>(null);
-
-  useEffect(() => {
-    setCalcService(cfg.services[2] || cfg.services[0]);
-    setCalcFormat((cfg.services[2] || cfg.services[0])?.formats[0]);
-  }, [cfg]);
-
-  const WA_LINK_BASE = `https://wa.me/${cfg.whatsapp}`;
-
   const price = useMemo(() => {
     const factor = formatFactors[calcFormat] ?? 1;
     let qty = 1;
-    if (["carte", "flyer"].includes(calcService.id)) qty = calcQty / 100;
-    else qty = calcQty;
+    if (["carte", "flyer"].includes(calcService.id)) qty = calcQty / 100; else qty = calcQty;
     let raw = calcService.base * factor * qty;
-    if (fini === "Brillant") raw *= 1.1;
-    if (fini === "Soft-Touch") raw *= 1.25;
-    if (qty >= 5) raw *= 0.85;
-    else if (qty >= 3) raw *= 0.92;
     return Math.round(raw / 100) * 100;
-  }, [calcService, calcQty, calcFormat, fini]);
+  }, [calcService, calcQty, calcFormat]);
 
-  function openWhatsApp(message: string) {
-    const url = `${WA_LINK_BASE}?text=${encodeURIComponent(message)}`;
-    setWaMsg(message);
-    setToast("WhatsApp prêt");
-    try { window.open(url, "_blank"); } catch {}
-    setTimeout(() => setToast(null), 4000);
-  }
+  useEffect(() => { setCalcService(cfg.services[2] || cfg.services[0]); setCalcFormat((cfg.services[2] || cfg.services[0])?.formats[0]); }, [cfg]);
+  const WA_LINK_BASE = `https://wa.me/${cfg.whatsapp}`;
+  function openWhatsApp(message: string) { const url = `${WA_LINK_BASE}?text=${encodeURIComponent(message)}`; try { window.open(url, "_blank"); } catch {} }
+  const handleInstall = async () => {
+    if (deferredPrompt) { deferredPrompt.prompt(); const { outcome } = await deferredPrompt.userChoice; if (outcome === 'accepted') pushNotif("App installée 🎉", "Merci d'avoir installé Agbekoi Print"); setDeferredPrompt(null); }
+    else setShowInstallHelp(true);
+  };
+  const unread = notifs.filter((n: any) => !n.read).length;
+  const markAllRead = () => { const next = notifs.map((n: any) => ({ ...n, read: true })); setNotifs(next); localStorage.setItem(NOTIF_KEY, JSON.stringify(next)); };
 
   if (showAdmin) {
     if (!isAuthed) {
@@ -217,30 +142,26 @@ export default function App() {
           <div className="w-full max-w-[360px] bg-white text-black rounded-[24px] p-8">
             <div className="w-12 h-12 rounded-xl bg-black text-white grid place-items-center"><Lock size={20}/></div>
             <h1 className="mt-4 font-bold text-[22px]">Admin Agbekoi</h1>
-            <p className="text-[13px] opacity-60 mt-1">Mot de passe requis</p>
             <input type="password" value={pwd} onChange={e => setPwd(e.target.value)} placeholder="Mot de passe" className="mt-6 w-full h-12 px-4 rounded-xl border-2 border-black outline-none"/>
             {pwdError && <div className="text-[12px] text-red-600 mt-2">Incorrect</div>}
             <button onClick={() => { if (pwd === ADMIN_PWD) { setIsAuthed(true); localStorage.setItem("agbekoi_admin_auth", "1"); setPwdError(false); } else setPwdError(true); }} className="mt-4 w-full h-12 rounded-full bg-black text-white font-semibold">Se connecter</button>
-            <div className="mt-3 text-[11px] opacity-50">Mot de passe: agbekoi123</div>
             <button onClick={() => { setShowAdmin(false); window.history.pushState({}, "", "/"); }} className="mt-3 w-full text-[12px] opacity-60">← Retour site</button>
           </div>
         </div>
       );
     }
-    return <AdminPanel cfg={cfg} save={save} onExit={() => { setShowAdmin(false); window.history.pushState({}, "", "/"); }} />;
+    return <AdminPanel cfg={cfg} save={save} onExit={() => { setShowAdmin(false); window.history.pushState({}, "", "/"); }} onNotify={pushNotif} />;
   }
 
   return (
     <div className="min-h-screen bg-white text-neutral-900 overflow-x-hidden">
       <style>{`@import url('https://fonts.googleapis.com/css2?family=Syne:wght@600;700;800&family=Inter:wght@400;500;600;700&display=swap'); .font-display{font-family:'Syne',sans-serif}`}</style>
-
       <div className="sticky top-0 z-30 backdrop-blur-xl bg-white/80 border-b border-black/5">
         <div className="max-w-[1240px] mx-auto px-5 sm:px-8 h-[64px] flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <div className="w-9 h-9 rounded-[12px] bg-black text-white grid place-items-center font-display font-[800]">A</div>
-            <div className="font-display font-[800] text-[15px]">AGBEKOI PRINT</div>
-          </div>
+          <div className="flex items-center gap-3"><div className="w-9 h-9 rounded-[12px] bg-black text-white grid place-items-center font-display font-[800]">A</div><div className="font-display font-[800] text-[15px]">AGBEKOI PRINT</div></div>
           <div className="flex items-center gap-2">
+            <button onClick={handleInstall} className="h-9 px-4 rounded-full bg-[#FFC700] text-black font-bold text-[12px] flex items-center gap-2"><Download size={14}/> Installer</button>
+            <button onClick={() => { setShowNotifs(!showNotifs); if (unread > 0) setTimeout(markAllRead, 1000); }} className="relative w-9 h-9 rounded-full bg-neutral-100 grid place-items-center"><Bell size={16}/>{unread > 0 && <span className="absolute -top-1 -right-1 w-5 h-5 bg-red-500 text-white text-[10px] font-bold rounded-full grid place-items-center">{unread}</span>}</button>
             <button onClick={() => setShowAdmin(true)} className="w-9 h-9 rounded-full bg-neutral-100 grid place-items-center"><Settings size={16}/></button>
             <a href={`https://wa.me/${cfg.whatsapp}`} target="_blank" className="hidden sm:flex h-9 px-4 rounded-full bg-black text-white text-[13px] font-semibold items-center gap-2"><Phone size={14}/> WhatsApp</a>
           </div>
@@ -250,60 +171,54 @@ export default function App() {
       <section className="bg-[#FFFEF5] border-b border-black/5">
         <div className="max-w-[1240px] mx-auto px-5 sm:px-8 py-10 sm:py-16 grid lg:grid-cols-[1.1fr_0.9fr] gap-10 items-center">
           <div>
-            <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-black text-white text-[11px] font-semibold"><Sparkles size={12} className="text-[#FFC700"/> {cfg.badge}</div>
+            <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-black text-white text-[11px] font-semibold"><Sparkles size={12} className="text-[#FFC700]" /> {cfg.badge}</div>
             <h1 className="mt-4 font-display font-[800] text-[42px] sm:text-[56px] leading-[0.9] tracking-tight">{cfg.heroTitle1}<br/><span className="bg-[#FFC700] px-2">{cfg.heroTitle2}</span></h1>
             <p className="mt-4 text-[15px] leading-6 opacity-70 max-w-[520px]">{cfg.heroSubtitle}</p>
             <div className="mt-6 flex flex-wrap gap-3">
               <button onClick={() => openWhatsApp("Bonjour Agbekoi Print, je veux commander")} className="h-12 px-6 rounded-full bg-black text-white font-semibold text-[14px] flex items-center gap-2">Commander sur WhatsApp <ArrowUpRight size={16}/></button>
+              <button onClick={handleInstall} className="h-12 px-6 rounded-full bg-white border-2 border-black font-bold text-[14px] flex items-center gap-2"><Smartphone size={18}/> Installer l'App</button>
             </div>
           </div>
-
           <div className="bg-white rounded-[28px] border shadow p-5 sm:p-6">
             <div className="flex items-center justify-between"><h3 className="font-bold flex items-center gap-2"><Calculator size={18}/> Devis 30s</h3><span className="text-[11px] px-2.5 py-1 rounded-full bg-[#FFC700] font-bold">FCFA</span></div>
             <div className="mt-4 grid grid-cols-2 gap-2">
-              {cfg.services.map(s => {
-                const Icon = iconMap[s.iconName] || Printer;
-                const active = calcService.id === s.id;
-                return (
-                  <button key={s.id} onClick={() => { setCalcService(s); setCalcFormat(s.formats[0]); }} className={`text-left p-3 rounded-2xl border ${active ? "bg-black text-white border-black" : "bg-neutral-50 border-black/5"}`}>
-                    <div className="flex items-center gap-2"><Icon size={14}/><span className="text-[12px] font-semibold">{s.label}</span></div>
-                    <div className="text-[11px] mt-1 opacity-60">{s.base.toLocaleString()} F</div>
-                  </button>
-                );
-              })}
+              {cfg.services.map(s => { const Icon = iconMap[s.iconName] || Printer; const active = calcService.id === s.id; return (<button key={s.id} onClick={() => { setCalcService(s); setCalcFormat(s.formats[0]); }} className={`text-left p-3 rounded-2xl border ${active ? "bg-black text-white border-black" : "bg-neutral-50 border-black/5"}`}><div className="flex items-center gap-2"><Icon size={14}/><span className="text-[12px] font-semibold">{s.label}</span></div><div className="text-[11px] mt-1 opacity-60">{s.base.toLocaleString()} F</div></button>); })}
             </div>
-            <div className="mt-4 bg-[#FFFBEB] border border-[#FFC700]/30 rounded-2xl p-3">
-              <div className="text-[10px] font-bold opacity-60">PRIX ESTIMÉ</div>
-              <div className="font-display font-[800] text-[22px]">{price.toLocaleString()} F</div>
-            </div>
+            <div className="mt-4 bg-[#FFFBEB] border border-[#FFC700]/30 rounded-2xl p-3"><div className="text-[10px] font-bold opacity-60">PRIX ESTIMÉ</div><div className="font-display font-[800] text-[22px]">{price.toLocaleString()} F</div></div>
             <button onClick={() => openWhatsApp(`Bonjour, devis: ${calcService.label} ${calcFormat} x${calcQty} = ${price} F`)} className="mt-4 w-full h-12 rounded-full bg-[#25D366] text-white font-bold flex items-center justify-center gap-2"><MessageCircle size={18}/> Commander sur WhatsApp</button>
           </div>
         </div>
       </section>
 
-      <section className="max-w-[1240px] mx-auto px-5 sm:px-8 py-12">
-        <h2 className="font-display font-[800] text-[24px]">Tous nos services</h2>
-        <div className="mt-6 grid sm:grid-cols-2 lg:grid-cols-4 gap-4">
-          {cfg.services.map(s => {
-            const Icon = iconMap[s.iconName] || Printer;
-            return (
-              <div key={s.id} className="rounded-[20px] border p-5 bg-white">
-                <div className="w-10 h-10 rounded-full bg-black text-white grid place-items-center"><Icon size={18}/></div>
-                <div className="mt-3 font-semibold">{s.label}</div>
-                <div className="mt-1 text-[12px] opacity-60">{s.desc}</div>
-                <div className="mt-3 font-[800] text-[20px]">{s.base.toLocaleString()} F</div>
-                <div className="text-[11px] opacity-60">{s.unit}</div>
-              </div>
-            );
-          })}
+      <footer className="bg-black text-white py-10 text-center text-[12px]"><div>© Agbekoi Print • <button onClick={() => setShowAdmin(true)} className="underline">Admin</button> • App + Notifs 🔔</div></footer>
+
+      {toast && <div className="fixed bottom-20 left-1/2 -translate-x-1/2 bg-black text-white px-5 py-3 rounded-full text-[13px] z-50 shadow-xl">{toast}</div>}
+
+      {showNotifs && (
+        <div className="fixed top-[70px] right-5 z-50 w-[360px] max-w-[90vw] bg-white rounded-[20px] border shadow-[0_20px_60px_rgba(0,0,0,0.2)] overflow-hidden">
+          <div className="p-4 border-b flex items-center justify-between"><div className="font-bold flex items-center gap-2"><Bell size={16}/> Notifications {unread > 0 && <span className="text-[11px] px-2 py-0.5 rounded-full bg-red-500 text-white">{unread} new</span>}</div><button onClick={() => setShowNotifs(false)} className="w-8 h-8 rounded-full bg-neutral-100 grid place-items-center"><X size={14}/></button></div>
+          <div className="max-h-[400px] overflow-auto">
+            {notifs.length === 0 && <div className="p-8 text-center text-[13px] opacity-50">Aucune notif. Modifie un prix dans /admin pour tester.</div>}
+            {notifs.map((n: any) => (<div key={n.id} className={`p-4 border-b last:border-0 ${!n.read ? 'bg-[#FFFBEB]/60' : ''}`}><div className="font-semibold text-[13px]">{n.title}</div><div className="text-[12px] opacity-70 mt-1">{n.body}</div><div className="text-[10px] opacity-40 mt-2">{n.time}</div></div>))}
+            {notifs.length > 0 && <button onClick={() => { setNotifs([]); localStorage.removeItem(NOTIF_KEY); }} className="w-full h-10 text-[12px] opacity-60">Effacer tout</button>}
+          </div>
         </div>
-      </section>
+      )}
 
-      <footer className="bg-black text-white py-10 text-center text-[12px]">
-        <div>© Agbekoi Print • <button onClick={() => setShowAdmin(true)} className="underline">Admin</button> • agbekoi123</div>
-      </footer>
-
-      {toast && <div className="fixed bottom-20 left-1/2 -translate-x-1/2 bg-black text-white px-4 py-2 rounded-full text-[12px]">{toast}</div>}
+      {showInstallHelp && (
+        <div className="fixed inset-0 z-[100] bg-black/60 backdrop-blur-sm grid place-items-center p-6">
+          <div className="bg-white rounded-[24px] p-6 max-w-[360px] w-full">
+            <div className="w-12 h-12 rounded-xl bg-[#FFC700] grid place-items-center"><Smartphone size={24}/></div>
+            <h3 className="mt-4 font-bold text-[18px]">Installer Agbekoi Print</h3>
+            <div className="mt-4 space-y-3 text-[13px] leading-5">
+              <div><b>Android Chrome :</b><br/>3 points ⋮ → <b>Installer l'application</b></div>
+              <div><b>iPhone Safari :</b><br/>Bouton Partage <Share size={12} className="inline"/> → <b>Sur l'écran d'accueil</b></div>
+              <div><b>PC :</b><br/>Barre d'adresse → icône Installer <Download size={12} className="inline"/> ou menu ⋮ → Installer</div>
+            </div>
+            <button onClick={() => setShowInstallHelp(false)} className="mt-6 w-full h-11 rounded-full bg-black text-white font-semibold">J'ai compris</button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
