@@ -1,9 +1,8 @@
 import { useState, useMemo, useEffect } from "react";
 import {
   Printer, Flag, CreditCard, FileText, Shirt, Sticker, Heart, BookOpen,
-  Zap, Award, Wallet, Truck, MessageCircle, Phone, MapPin, Clock,
-  ArrowUpRight, Check, Calculator, Sparkles, Upload, X, Settings,
-  Save, Eye, DollarSign, Type, Lock
+  Calculator, Sparkles, Settings, Save, Eye, DollarSign, Type, Lock,
+  ArrowUpRight, MessageCircle, Phone, Download
 } from "lucide-react";
 
 type Service = {
@@ -73,23 +72,55 @@ function useConfig() {
   return { cfg, save };
 }
 
+function usePWA() {
+  const [deferred, setDeferred] = useState<any>(null);
+  const [canInstall, setCanInstall] = useState(false);
+  const [installed, setInstalled] = useState(false);
+
+  useEffect(() => {
+    // Register SW
+    if ('serviceWorker' in navigator) {
+      navigator.serviceWorker.register('/sw.js').catch(()=>{});
+    }
+    const onBeforeInstall = (e: any) => {
+      e.preventDefault();
+      setDeferred(e);
+      setCanInstall(true);
+    };
+    const onInstalled = () => {
+      setInstalled(true);
+      setCanInstall(false);
+    };
+    window.addEventListener('beforeinstallprompt', onBeforeInstall);
+    window.addEventListener('appinstalled', onInstalled);
+    // check if already installed
+    if (window.matchMedia('(display-mode: standalone)').matches) setInstalled(true);
+    return () => {
+      window.removeEventListener('beforeinstallprompt', onBeforeInstall);
+      window.removeEventListener('appinstalled', onInstalled);
+    };
+  }, []);
+
+  const install = async () => {
+    if (!deferred) return;
+    deferred.prompt();
+    const { outcome } = await deferred.userChoice;
+    if (outcome === 'accepted') setCanInstall(false);
+    setDeferred(null);
+  };
+
+  return { canInstall, installed, install };
+}
+
 function AdminPanel({ cfg, save, onExit }: { cfg: Config; save: (c: Config) => void; onExit: () => void }) {
   const [local, setLocal] = useState<Config>(cfg);
   const [tab, setTab] = useState<"prix" | "textes" | "whatsapp">("prix");
   const [toast, setToast] = useState<string | null>(null);
-
   useEffect(() => { setLocal(cfg); }, [cfg]);
-
-  const doSave = () => {
-    save(local);
-    setToast("✅ Enregistré ! Le site est à jour.");
-    setTimeout(() => setToast(null), 3000);
-  };
-
+  const doSave = () => { save(local); setToast("✅ Enregistré !"); setTimeout(() => setToast(null), 3000); };
   const updateService = (id: string, field: keyof Service, value: any) => {
     setLocal(l => ({ ...l, services: l.services.map(s => s.id === id ? { ...s, [field]: value } : s) }));
   };
-
   return (
     <div className="min-h-screen bg-[#f6f5f0] text-neutral-900">
       <header className="sticky top-0 z-20 bg-black text-white h-[64px] flex items-center justify-between px-6">
@@ -102,14 +133,12 @@ function AdminPanel({ cfg, save, onExit }: { cfg: Config; save: (c: Config) => v
           <button onClick={doSave} className="h-9 px-4 rounded-full bg-[#FFC700] text-black font-semibold flex items-center gap-2 text-[13px]"><Save size={14}/> Enregistrer</button>
         </div>
       </header>
-
       <div className="max-w-[1100px] mx-auto p-6 grid lg:grid-cols-[200px_1fr] gap-6">
         <nav className="space-y-2">
           <button onClick={() => setTab("prix")} className={`w-full h-11 px-4 rounded-xl flex items-center gap-3 text-[14px] font-medium text-left ${tab === "prix" ? "bg-black text-white" : "bg-white border"}`}><DollarSign size={16}/> Prix & Services</button>
           <button onClick={() => setTab("textes")} className={`w-full h-11 px-4 rounded-xl flex items-center gap-3 text-[14px] font-medium text-left ${tab === "textes" ? "bg-black text-white" : "bg-white border"}`}><Type size={16}/> Textes</button>
           <button onClick={() => setTab("whatsapp")} className={`w-full h-11 px-4 rounded-xl flex items-center gap-3 text-[14px] font-medium text-left ${tab === "whatsapp" ? "bg-black text-white" : "bg-white border"}`}><MessageCircle size={16}/> WhatsApp</button>
         </nav>
-
         <div className="bg-white rounded-[20px] border p-6 shadow-sm min-h-[600px]">
           {tab === "prix" && (
             <div className="space-y-4">
@@ -130,7 +159,6 @@ function AdminPanel({ cfg, save, onExit }: { cfg: Config; save: (c: Config) => v
               </div>
             </div>
           )}
-
           {tab === "textes" && (
             <div className="space-y-6">
               <h2 className="font-bold text-[20px]">Textes</h2>
@@ -140,7 +168,6 @@ function AdminPanel({ cfg, save, onExit }: { cfg: Config; save: (c: Config) => v
               <label className="space-y-1 block"><div className="text-[12px] font-semibold opacity-60">SOUS-TITRE</div><textarea value={local.heroSubtitle} onChange={e => setLocal({ ...local, heroSubtitle: e.target.value })} className="w-full p-4 rounded-xl border min-h-[80px]"/></label>
             </div>
           )}
-
           {tab === "whatsapp" && (
             <div className="space-y-6">
               <h2 className="font-bold text-[20px]">WhatsApp</h2>
@@ -150,7 +177,6 @@ function AdminPanel({ cfg, save, onExit }: { cfg: Config; save: (c: Config) => v
               </label>
             </div>
           )}
-
           <div className="mt-10 pt-6 border-t flex gap-3">
             <button onClick={doSave} className="h-11 px-6 rounded-full bg-black text-white font-semibold flex items-center gap-2"><Save size={16}/> Enregistrer</button>
             <button onClick={() => { if (confirm("Réinitialiser?")) { localStorage.removeItem(STORAGE_KEY); location.reload(); } }} className="h-11 px-6 rounded-full border font-medium">Réinitialiser</button>
@@ -164,6 +190,7 @@ function AdminPanel({ cfg, save, onExit }: { cfg: Config; save: (c: Config) => v
 
 export default function App() {
   const { cfg, save } = useConfig();
+  const { canInstall, installed, install } = usePWA();
   const [showAdmin, setShowAdmin] = useState(false);
   const [pwd, setPwd] = useState("");
   const [pwdError, setPwdError] = useState(false);
@@ -180,7 +207,6 @@ export default function App() {
   const [calcFormat, setCalcFormat] = useState(DEFAULT_SERVICES[2].formats[0]);
   const [fini, setFini] = useState("Mat");
   const [toast, setToast] = useState<string | null>(null);
-  const [waMsg, setWaMsg] = useState<string | null>(null);
 
   useEffect(() => {
     setCalcService(cfg.services[2] || cfg.services[0]);
@@ -204,7 +230,6 @@ export default function App() {
 
   function openWhatsApp(message: string) {
     const url = `${WA_LINK_BASE}?text=${encodeURIComponent(message)}`;
-    setWaMsg(message);
     setToast("WhatsApp prêt");
     try { window.open(url, "_blank"); } catch {}
     setTimeout(() => setToast(null), 4000);
@@ -239,8 +264,14 @@ export default function App() {
           <div className="flex items-center gap-3">
             <div className="w-9 h-9 rounded-[12px] bg-black text-white grid place-items-center font-display font-[800]">A</div>
             <div className="font-display font-[800] text-[15px]">AGBEKOI PRINT</div>
+            {installed && <span className="ml-2 text-[10px] px-2 py-1 rounded-full bg-[#00D26A] text-white font-bold">APP INSTALLÉE</span>}
           </div>
           <div className="flex items-center gap-2">
+            {canInstall && (
+              <button onClick={install} className="h-9 px-4 rounded-full bg-[#FFC700] text-black font-bold text-[13px] flex items-center gap-2 animate-pulse">
+                <Download size={14}/> Installer l'App
+              </button>
+            )}
             <button onClick={() => setShowAdmin(true)} className="w-9 h-9 rounded-full bg-neutral-100 grid place-items-center"><Settings size={16}/></button>
             <a href={`https://wa.me/${cfg.whatsapp}`} target="_blank" className="hidden sm:flex h-9 px-4 rounded-full bg-black text-white text-[13px] font-semibold items-center gap-2"><Phone size={14}/> WhatsApp</a>
           </div>
@@ -255,7 +286,11 @@ export default function App() {
             <p className="mt-4 text-[15px] leading-6 opacity-70 max-w-[520px]">{cfg.heroSubtitle}</p>
             <div className="mt-6 flex flex-wrap gap-3">
               <button onClick={() => openWhatsApp("Bonjour Agbekoi Print, je veux commander")} className="h-12 px-6 rounded-full bg-black text-white font-semibold text-[14px] flex items-center gap-2">Commander sur WhatsApp <ArrowUpRight size={16}/></button>
+              {canInstall && (
+                <button onClick={install} className="h-12 px-6 rounded-full bg-white border-2 border-black font-bold text-[14px] flex items-center gap-2"><Download size={18}/> Installer comme App</button>
+              )}
             </div>
+            {installed && <div className="mt-4 text-[12px] p-3 rounded-xl bg-[#E8FFF1] border border-[#00D26A]/20 text-[#0A7A3E]">✅ Merci ! L'app est installée sur ton téléphone. Tu peux l'ouvrir depuis ton écran d'accueil.</div>}
           </div>
 
           <div className="bg-white rounded-[28px] border shadow p-5 sm:p-6">
@@ -300,10 +335,21 @@ export default function App() {
       </section>
 
       <footer className="bg-black text-white py-10 text-center text-[12px]">
-        <div>© Agbekoi Print • <button onClick={() => setShowAdmin(true)} className="underline">Admin</button> • agbekoi123</div>
+        <div>© Agbekoi Print • <button onClick={() => setShowAdmin(true)} className="underline">Admin</button> • App installable 📲</div>
       </footer>
 
       {toast && <div className="fixed bottom-20 left-1/2 -translate-x-1/2 bg-black text-white px-4 py-2 rounded-full text-[12px]">{toast}</div>}
+
+      {/* Bannière mobile installer */}
+      {canInstall && (
+        <div className="fixed bottom-0 left-0 right-0 z-50 bg-black text-white p-4 flex items-center justify-between gap-3 sm:hidden">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-xl bg-[#FFC700] grid place-items-center font-black text-black">A</div>
+            <div><div className="font-bold text-[13px] leading-none">Installer Agbekoi Print</div><div className="text-[11px] opacity-60">Accès rapide comme une app</div></div>
+          </div>
+          <button onClick={install} className="h-10 px-5 rounded-full bg-[#FFC700] text-black font-bold text-[13px]">Installer</button>
+        </div>
+      )}
     </div>
   );
 }
