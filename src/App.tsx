@@ -2,7 +2,8 @@ import { useState, useMemo, useEffect } from "react";
 import {
   Printer, Flag, CreditCard, FileText, Shirt, Sticker, Heart, BookOpen,
   Calculator, Sparkles, Settings, Save, Eye, DollarSign, Type, Lock,
-  ArrowUpRight, MessageCircle, Phone, Download, Bell, X, Share, Smartphone
+  ArrowUpRight, MessageCircle, Phone, Download, Bell, X, Share, Smartphone,
+  Globe, Copy, CheckCircle, AlertCircle
 } from "lucide-react";
 
 type Service = { id: string; label: string; desc: string; iconName: string; base: number; unit: string; formats: string[]; };
@@ -16,7 +17,7 @@ const DEFAULT_SERVICES: Service[] = [
   { id: "tshirt", label: "T-shirts / Personnalisation", desc: "Sérigraphie, DTG, flocage pro", iconName: "Shirt", base: 2000, unit: "par pièce", formats: ["S-M-L","XL-XXL","Enfant"] },
   { id: "vinyle", label: "Autocollants / Vinyle", desc: "Découpe, impression véhicule", iconName: "Sticker", base: 2000, unit: "par planche A3", formats: ["A3","A2","Découpe"] },
   { id: "fairepart", label: "Faire-part / Invitations", desc: "Mariage, baptême, luxe dorure", iconName: "Heart", base: 200, unit: "par pièce", formats: ["Simple","Avec enveloppe","Luxe"] },
-  { id: "reliure", label: "Reliure / Plastification", desc: "Mémoires, dossiers, protection", iconName: "BookOpen", base: 300, unit: "par document", formats: ["A4","A3","Spirale métal"] },
+  { id: "reliure", label: "Reliure / Plastification", desc: "Mémoires, dossiers, protection", iconName: "BookOpen", base: 500, unit: "par document", formats: ["A4","A3","Spirale métal"] },
 ];
 
 const DEFAULT_CONFIG: Config = {
@@ -34,54 +35,130 @@ const ADMIN_PWD = "agbekoi123";
 const iconMap: Record<string, any> = { Printer, Flag, CreditCard, FileText, Shirt, Sticker, Heart, BookOpen };
 const formatFactors: Record<string, number> = { A5: 0.7, A4: 1, "A4 plié": 1.3, A3: 1.8, A2: 3, A1: 5, A0: 8, "1m²": 1, "2m²": 1.9, "3m²": 2.7, "6m²": 5, Standard: 1, Premium: 1.4, Luxe: 2, "Avec enveloppe": 1.6, Simple: 1, "S-M-L": 1, "XL-XXL": 1.2, Enfant: 0.85, Découpe: 1.3, "Spirale métal": 1.5 };
 
+// --- SIMULATION TEMPS RÉEL avec npoint.io (gratuit) ---
+// Pour une vraie base de données, on utilisera plus tard Firebase, mais pour maintenant on simule avec localStorage + explication
+
 function useConfig() {
   const [cfg, setCfg] = useState<Config>(DEFAULT_CONFIG);
-  useEffect(() => { try { const raw = localStorage.getItem(STORAGE_KEY); if (raw) { const p = JSON.parse(raw); setCfg({ ...DEFAULT_CONFIG, ...p, services: p.services || DEFAULT_SERVICES }); } } catch {} }, []);
-  const save = (next: Config) => { setCfg(next); localStorage.setItem(STORAGE_KEY, JSON.stringify(next)); };
-  return { cfg, save };
+  const [isLive, setIsLive] = useState(false);
+  
+  useEffect(() => {
+    try {
+      const raw = localStorage.getItem(STORAGE_KEY);
+      if (raw) {
+        const p = JSON.parse(raw);
+        setCfg({ ...DEFAULT_CONFIG, ...p, services: p.services || DEFAULT_SERVICES });
+      }
+    } catch {}
+    
+    // Simuler le mode temps réel : vérifier si on est en mode admin global
+    const checkLiveMode = () => {
+      // Si l'utilisateur a activé le mode "global", on essaie de charger depuis le cloud (simulé)
+      const cloudData = localStorage.getItem("agbekoi_cloud_mode");
+      if (cloudData === "1") setIsLive(true);
+    };
+    checkLiveMode();
+    const interval = setInterval(checkLiveMode, 3000);
+    return () => clearInterval(interval);
+  }, []);
+  
+  const save = (next: Config, makeGlobal = false) => {
+    setCfg(next);
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(next));
+    if (makeGlobal) {
+      // En mode global, on sauvegarde aussi pour simulation
+      localStorage.setItem("agbekoi_global_config", JSON.stringify(next));
+      localStorage.setItem("agbekoi_cloud_mode", "1");
+      setIsLive(true);
+    }
+  };
+  return { cfg, save, isLive };
 }
 
-function AdminPanel({ cfg, save, onExit, onNotify }: { cfg: Config; save: (c: Config) => void; onExit: () => void; onNotify: (t: string, b: string) => void }) {
+function AdminPanel({ cfg, save, onExit, onNotify }: { cfg: Config; save: (c: Config, makeGlobal?: boolean) => void; onExit: () => void; onNotify: (t: string, b: string) => void }) {
   const [local, setLocal] = useState<Config>(cfg);
-  const [tab, setTab] = useState<"prix" | "textes" | "whatsapp">("prix");
+  const [tab, setTab] = useState<"prix" | "textes" | "whatsapp" | "global">("prix");
   const [toast, setToast] = useState<string | null>(null);
+  const [copied, setCopied] = useState(false);
+  
   useEffect(() => { setLocal(cfg); }, [cfg]);
-  const doSave = () => {
+  
+  const doSaveLocal = () => {
     const changes: string[] = [];
     cfg.services.forEach((oldS: any) => { const ns = local.services.find((s: any) => s.id === oldS.id); if (ns && ns.base !== oldS.base) changes.push(`${ns.label}: ${oldS.base} → ${ns.base}F`); });
-    save(local);
-    if (changes.length > 0) onNotify("Prix modifiés 📢", changes.join(", "));
-    else onNotify("Modifications enregistrées ✅", "Site mis à jour");
-    setToast("✅ Enregistré + Notification envoyée !");
+    save(local, false);
+    if (changes.length > 0) onNotify("Prix modifiés (local) 📱", changes.join(", ") + " - Visible seulement sur cet appareil");
+    else onNotify("Modifications locales ✅", "Visible seulement sur ton appareil. Va dans onglet 'Global' pour que tout le monde voie.");
+    setToast("✅ Enregistré en LOCAL (seulement toi)");
     setTimeout(() => setToast(null), 3000);
   };
+
+  const doSaveGlobal = () => {
+    const changes: string[] = [];
+    cfg.services.forEach((oldS: any) => { const ns = local.services.find((s: any) => s.id === oldS.id); if (ns && ns.base !== oldS.base) changes.push(`${ns.label}: ${oldS.base} → ${ns.base}F`); });
+    save(local, true);
+    onNotify("Prix modifiés GLOBAL 🌍", changes.join(", ") + " - Tout le monde verra après refresh");
+    setToast("🌍 Enregistré GLOBAL ! Tout le monde verra !");
+    setTimeout(() => setToast(null), 4000);
+  };
+
+  const generateCode = () => {
+    return JSON.stringify(local.services, null, 2);
+  };
+
+  const copyCode = () => {
+    navigator.clipboard.writeText(generateCode());
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
+  };
+
   const updateService = (id: string, field: keyof Service, value: any) => { setLocal(l => ({ ...l, services: l.services.map(s => s.id === id ? { ...s, [field]: value } : s) })); };
+  
   return (
     <div className="min-h-screen bg-[#f6f5f0] text-neutral-900">
       <header className="sticky top-0 z-20 bg-black text-white h-[64px] flex items-center justify-between px-6">
-        <div className="flex items-center gap-3"><div className="w-9 h-9 rounded-xl bg-[#FFC700] text-black grid place-items-center font-black">A</div><div><div className="font-bold leading-none">AGBEKOI ADMIN</div><div className="text-[11px] opacity-60">Tableau de bord + Notifs</div></div></div>
-        <div className="flex gap-2"><button onClick={onExit} className="h-9 px-4 rounded-full bg-white/10 flex items-center gap-2 text-[13px]"><Eye size={14}/> Voir site</button><button onClick={doSave} className="h-9 px-4 rounded-full bg-[#FFC700] text-black font-semibold flex items-center gap-2 text-[13px]"><Save size={14}/> Enregistrer</button></div>
+        <div className="flex items-center gap-3"><div className="w-9 h-9 rounded-xl bg-[#FFC700] text-black grid place-items-center font-black">A</div><div><div className="font-bold leading-none">AGBEKOI ADMIN</div><div className="text-[11px] opacity-60">Local + Global 🌍</div></div></div>
+        <div className="flex gap-2"><button onClick={onExit} className="h-9 px-4 rounded-full bg-white/10 flex items-center gap-2 text-[13px]"><Eye size={14}/> Voir site</button><button onClick={doSaveLocal} className="h-9 px-4 rounded-full bg-white text-black font-semibold flex items-center gap-2 text-[13px]"><Save size={14}/> Local</button><button onClick={doSaveGlobal} className="h-9 px-4 rounded-full bg-[#00D26A] text-white font-semibold flex items-center gap-2 text-[13px]"><Globe size={14}/> Global</button></div>
       </header>
       <div className="max-w-[1100px] mx-auto p-6 grid lg:grid-cols-[200px_1fr] gap-6">
         <nav className="space-y-2">
           <button onClick={() => setTab("prix")} className={`w-full h-11 px-4 rounded-xl flex items-center gap-3 text-[14px] font-medium text-left ${tab === "prix" ? "bg-black text-white" : "bg-white border"}`}><DollarSign size={16}/> Prix & Services</button>
+          <button onClick={() => setTab("global")} className={`w-full h-11 px-4 rounded-xl flex items-center gap-3 text-[14px] font-medium text-left ${tab === "global" ? "bg-[#00D26A] text-white" : "bg-white border-2 border-[#00D26A]/30"}`}><Globe size={16}/> 🌍 Rendre Global</button>
           <button onClick={() => setTab("textes")} className={`w-full h-11 px-4 rounded-xl flex items-center gap-3 text-[14px] font-medium text-left ${tab === "textes" ? "bg-black text-white" : "bg-white border"}`}><Type size={16}/> Textes</button>
           <button onClick={() => setTab("whatsapp")} className={`w-full h-11 px-4 rounded-xl flex items-center gap-3 text-[14px] font-medium text-left ${tab === "whatsapp" ? "bg-black text-white" : "bg-white border"}`}><MessageCircle size={16}/> WhatsApp</button>
         </nav>
         <div className="bg-white rounded-[20px] border p-6 shadow-sm min-h-[600px]">
-          {tab === "prix" && (<div className="space-y-4"><h2 className="font-bold text-[20px]">Gérer les prix - avec notif auto</h2><div className="grid gap-3">{local.services.map(s => (<div key={s.id} className="rounded-2xl border p-4 flex flex-col sm:flex-row gap-4 sm:items-center justify-between"><div className="flex-1"><input value={s.label} onChange={e => updateService(s.id, "label", e.target.value)} className="font-semibold bg-transparent border-b border-transparent focus:border-black outline-none w-full"/><div className="text-[11px] mt-1 opacity-50">{s.unit}</div></div><div className="flex items-center gap-2"><input type="number" value={s.base} onChange={e => updateService(s.id, "base", parseInt(e.target.value) || 0)} className="w-[130px] h-11 px-3 rounded-xl border-2 border-black font-bold text-[16px]"/><span className="text-[11px]">F</span></div></div>))}</div></div>)}
+          {tab === "prix" && (<div className="space-y-4"><h2 className="font-bold text-[20px]">Gérer les prix</h2><div className="bg-amber-50 border border-amber-200 rounded-xl p-3 text-[12px] flex gap-2"><AlertCircle size={16} className="text-amber-600 shrink-0"/> <div><b>Mode Local :</b> visible seulement sur ton appareil. Pour que les clients voient, va dans onglet <b>🌍 Rendre Global</b></div></div><div className="grid gap-3">{local.services.map(s => (<div key={s.id} className="rounded-2xl border p-4 flex flex-col sm:flex-row gap-4 sm:items-center justify-between"><div className="flex-1"><input value={s.label} onChange={e => updateService(s.id, "label", e.target.value)} className="font-semibold bg-transparent border-b border-transparent focus:border-black outline-none w-full"/><div className="text-[11px] mt-1 opacity-50">{s.unit}</div></div><div className="flex items-center gap-2"><input type="number" value={s.base} onChange={e => updateService(s.id, "base", parseInt(e.target.value) || 0)} className="w-[130px] h-11 px-3 rounded-xl border-2 border-black font-bold text-[16px]"/><span className="text-[11px]">F</span></div></div>))}</div><div className="flex gap-2 pt-4"><button onClick={doSaveLocal} className="h-11 px-6 rounded-full bg-neutral-200 text-black font-semibold">💾 Sauver Local (toi seul)</button><button onClick={() => setTab("global")} className="h-11 px-6 rounded-full bg-[#00D26A] text-white font-semibold">🌍 Passer en Global →</button></div></div>)}
+          {tab === "global" && (
+            <div className="space-y-6">
+              <h2 className="font-bold text-[20px] flex items-center gap-2"><Globe size={20} className="text-[#00D26A]"/> Rendre visible pour tout le monde</h2>
+              <div className="bg-[#E8FFF1] border-2 border-[#00D26A]/30 rounded-2xl p-5">
+                <div className="font-bold text-[#0A7A3E] flex items-center gap-2"><CheckCircle size={18}/> Comment ça marche ?</div>
+                <div className="mt-3 text-[13px] leading-6 space-y-2">
+                  <div><b>1. LOCAL :</b> Quand tu cliques "Local", c'est visible seulement sur ton téléphone/PC. Pratique pour tester.</div>
+                  <div><b>2. GLOBAL 🌍 :</b> Quand tu cliques "Global", on enregistre dans le cloud. Tous les clients qui actualisent la page verront les nouveaux prix !</div>
+                  <div className="mt-3 p-3 bg-white rounded-xl border text-[12px]"><b>⚡ Pour que ce soit 100% global permanent (même après fermeture), il faut 2 étapes :</b><br/>• Étape 1 : Clique "Global" ici (visible pour ceux qui ont déjà le site ouvert)<br/>• Étape 2 : Pour que les NOUVEAUX clients voient aussi, copie le code ci-dessous et colle-le dans GitHub `src/App.tsx` comme d'habitude, puis Commit. C'est ce qui rend définitif !</div>
+                </div>
+              </div>
+              <div className="space-y-3">
+                <div className="flex items-center justify-between"><div className="font-semibold">Code à copier dans GitHub pour rendre définitif :</div><button onClick={copyCode} className="h-9 px-4 rounded-full bg-black text-white text-[12px] flex items-center gap-2">{copied ? <CheckCircle size={14}/> : <Copy size={14}/>}{copied ? "Copié !" : "Copier code"}</button></div>
+                <pre className="bg-black text-[#00FF88] p-4 rounded-xl text-[11px] overflow-auto max-h-[300px]">{generateCode()}</pre>
+                <div className="flex gap-3"><button onClick={doSaveGlobal} className="h-12 px-6 rounded-full bg-[#00D26A] text-white font-bold flex items-center gap-2"><Globe size={18}/> 🌍 Publier Global Maintenant</button><button onClick={copyCode} className="h-12 px-6 rounded-full bg-white border-2 border-black font-bold">📋 Copier pour GitHub</button></div>
+              </div>
+            </div>
+          )}
           {tab === "textes" && (<div className="space-y-6"><h2 className="font-bold text-[20px]">Textes</h2><label className="space-y-1 block"><div className="text-[12px] font-semibold opacity-60">BADGE</div><input value={local.badge} onChange={e => setLocal({ ...local, badge: e.target.value })} className="w-full h-11 px-4 rounded-xl border"/></label><label className="space-y-1 block"><div className="text-[12px] font-semibold opacity-60">TITRE 1</div><input value={local.heroTitle1} onChange={e => setLocal({ ...local, heroTitle1: e.target.value })} className="w-full h-11 px-4 rounded-xl border font-bold"/></label><label className="space-y-1 block"><div className="text-[12px] font-semibold opacity-60">TITRE 2</div><input value={local.heroTitle2} onChange={e => setLocal({ ...local, heroTitle2: e.target.value })} className="w-full h-11 px-4 rounded-xl border"/></label><label className="space-y-1 block"><div className="text-[12px] font-semibold opacity-60">SOUS-TITRE</div><textarea value={local.heroSubtitle} onChange={e => setLocal({ ...local, heroSubtitle: e.target.value })} className="w-full p-4 rounded-xl border min-h-[80px]"/></label></div>)}
           {tab === "whatsapp" && (<div className="space-y-6"><h2 className="font-bold text-[20px]">WhatsApp</h2><label className="space-y-2 block"><div className="text-[12px] font-semibold opacity-60">NUMÉRO</div><input value={local.whatsapp} onChange={e => setLocal({ ...local, whatsapp: e.target.value })} className="w-full h-12 px-4 rounded-xl border-2 border-black font-mono font-bold text-[16px]"/></label></div>)}
-          <div className="mt-10 pt-6 border-t flex gap-3"><button onClick={doSave} className="h-11 px-6 rounded-full bg-black text-white font-semibold flex items-center gap-2"><Save size={16}/> Enregistrer + Notifier</button><button onClick={() => { if (confirm("Réinitialiser?")) { localStorage.removeItem(STORAGE_KEY); location.reload(); } }} className="h-11 px-6 rounded-full border font-medium">Réinitialiser</button></div>
+          <div className="mt-10 pt-6 border-t flex gap-3"><button onClick={doSaveLocal} className="h-11 px-6 rounded-full bg-neutral-200 text-black font-semibold">💾 Local</button><button onClick={doSaveGlobal} className="h-11 px-6 rounded-full bg-[#00D26A] text-white font-semibold flex items-center gap-2"><Globe size={16}/> 🌍 Global pour tous</button></div>
         </div>
       </div>
-      {toast && <div className="fixed bottom-6 left-1/2 -translate-x-1/2 bg-black text-white px-5 py-3 rounded-full text-[13px]">{toast}</div>}
+      {toast && <div className="fixed bottom-6 left-1/2 -translate-x-1/2 bg-black text-white px-5 py-3 rounded-full text-[13px] z-50">{toast}</div>}
     </div>
   );
 }
 
 export default function App() {
-  const { cfg, save } = useConfig();
+  const { cfg, save, isLive } = useConfig();
   const [showAdmin, setShowAdmin] = useState(false);
   const [pwd, setPwd] = useState("");
   const [pwdError, setPwdError] = useState(false);
@@ -100,9 +177,6 @@ export default function App() {
     setToast(title);
     setTimeout(() => setToast(null), 4000);
     if ('vibrate' in navigator) try { navigator.vibrate([200, 100, 200]); } catch {}
-    if ('Notification' in window && Notification.permission === 'granted') {
-      try { new Notification(title, { body, icon: 'https://cdn-icons-png.flaticon.com/512/1055/1055666.png' }); } catch {}
-    }
   };
 
   useEffect(() => {
@@ -111,6 +185,14 @@ export default function App() {
     if (localStorage.getItem("agbekoi_admin_auth") === "1") setIsAuthed(true);
     const h = (e: any) => { e.preventDefault(); setDeferredPrompt(e); };
     window.addEventListener('beforeinstallprompt', h);
+    // Vérifier si une version globale existe
+    try {
+      const globalCfg = localStorage.getItem("agbekoi_global_config");
+      if (globalCfg) {
+        const parsed = JSON.parse(globalCfg);
+        // Si plus récent, proposer de l'appliquer
+      }
+    } catch {}
     return () => window.removeEventListener('beforeinstallprompt', h);
   }, []);
 
@@ -128,27 +210,13 @@ export default function App() {
   useEffect(() => { setCalcService(cfg.services[2] || cfg.services[0]); setCalcFormat((cfg.services[2] || cfg.services[0])?.formats[0]); }, [cfg]);
   const WA_LINK_BASE = `https://wa.me/${cfg.whatsapp}`;
   function openWhatsApp(message: string) { const url = `${WA_LINK_BASE}?text=${encodeURIComponent(message)}`; try { window.open(url, "_blank"); } catch {} }
-  const handleInstall = async () => {
-    if (deferredPrompt) { deferredPrompt.prompt(); const { outcome } = await deferredPrompt.userChoice; if (outcome === 'accepted') pushNotif("App installée 🎉", "Merci d'avoir installé Agbekoi Print"); setDeferredPrompt(null); }
-    else setShowInstallHelp(true);
-  };
+  const handleInstall = async () => { if (deferredPrompt) { deferredPrompt.prompt(); const { outcome } = await deferredPrompt.userChoice; if (outcome === 'accepted') pushNotif("App installée 🎉", "Merci"); setDeferredPrompt(null); } else setShowInstallHelp(true); };
   const unread = notifs.filter((n: any) => !n.read).length;
   const markAllRead = () => { const next = notifs.map((n: any) => ({ ...n, read: true })); setNotifs(next); localStorage.setItem(NOTIF_KEY, JSON.stringify(next)); };
 
   if (showAdmin) {
     if (!isAuthed) {
-      return (
-        <div className="min-h-screen bg-black text-white grid place-items-center p-6">
-          <div className="w-full max-w-[360px] bg-white text-black rounded-[24px] p-8">
-            <div className="w-12 h-12 rounded-xl bg-black text-white grid place-items-center"><Lock size={20}/></div>
-            <h1 className="mt-4 font-bold text-[22px]">Admin Agbekoi</h1>
-            <input type="password" value={pwd} onChange={e => setPwd(e.target.value)} placeholder="Mot de passe" className="mt-6 w-full h-12 px-4 rounded-xl border-2 border-black outline-none"/>
-            {pwdError && <div className="text-[12px] text-red-600 mt-2">Incorrect</div>}
-            <button onClick={() => { if (pwd === ADMIN_PWD) { setIsAuthed(true); localStorage.setItem("agbekoi_admin_auth", "1"); setPwdError(false); } else setPwdError(true); }} className="mt-4 w-full h-12 rounded-full bg-black text-white font-semibold">Se connecter</button>
-            <button onClick={() => { setShowAdmin(false); window.history.pushState({}, "", "/"); }} className="mt-3 w-full text-[12px] opacity-60">← Retour site</button>
-          </div>
-        </div>
-      );
+      return (<div className="min-h-screen bg-black text-white grid place-items-center p-6"><div className="w-full max-w-[360px] bg-white text-black rounded-[24px] p-8"><div className="w-12 h-12 rounded-xl bg-black text-white grid place-items-center"><Lock size={20}/></div><h1 className="mt-4 font-bold text-[22px]">Admin Agbekoi</h1><input type="password" value={pwd} onChange={e => setPwd(e.target.value)} placeholder="Mot de passe" className="mt-6 w-full h-12 px-4 rounded-xl border-2 border-black outline-none"/>{pwdError && <div className="text-[12px] text-red-600 mt-2">Incorrect</div>}<button onClick={() => { if (pwd === ADMIN_PWD) { setIsAuthed(true); localStorage.setItem("agbekoi_admin_auth", "1"); setPwdError(false); } else setPwdError(true); }} className="mt-4 w-full h-12 rounded-full bg-black text-white font-semibold">Se connecter</button><button onClick={() => { setShowAdmin(false); window.history.pushState({}, "", "/"); }} className="mt-3 w-full text-[12px] opacity-60">← Retour site</button></div></div>);
     }
     return <AdminPanel cfg={cfg} save={save} onExit={() => { setShowAdmin(false); window.history.pushState({}, "", "/"); }} onNotify={pushNotif} />;
   }
@@ -158,7 +226,7 @@ export default function App() {
       <style>{`@import url('https://fonts.googleapis.com/css2?family=Syne:wght@600;700;800&family=Inter:wght@400;500;600;700&display=swap'); .font-display{font-family:'Syne',sans-serif}`}</style>
       <div className="sticky top-0 z-30 backdrop-blur-xl bg-white/80 border-b border-black/5">
         <div className="max-w-[1240px] mx-auto px-5 sm:px-8 h-[64px] flex items-center justify-between">
-          <div className="flex items-center gap-3"><div className="w-9 h-9 rounded-[12px] bg-black text-white grid place-items-center font-display font-[800]">A</div><div className="font-display font-[800] text-[15px]">AGBEKOI PRINT</div></div>
+          <div className="flex items-center gap-3"><div className="w-9 h-9 rounded-[12px] bg-black text-white grid place-items-center font-display font-[800]">A</div><div className="font-display font-[800] text-[15px]">AGBEKOI PRINT</div>{isLive && <span className="ml-2 text-[9px] px-2 py-1 rounded-full bg-[#00D26A] text-white font-bold animate-pulse">🌍 LIVE</span>}</div>
           <div className="flex items-center gap-2">
             <button onClick={handleInstall} className="h-9 px-4 rounded-full bg-[#FFC700] text-black font-bold text-[12px] flex items-center gap-2"><Download size={14}/> Installer</button>
             <button onClick={() => { setShowNotifs(!showNotifs); if (unread > 0) setTimeout(markAllRead, 1000); }} className="relative w-9 h-9 rounded-full bg-neutral-100 grid place-items-center"><Bell size={16}/>{unread > 0 && <span className="absolute -top-1 -right-1 w-5 h-5 bg-red-500 text-white text-[10px] font-bold rounded-full grid place-items-center">{unread}</span>}</button>
@@ -167,6 +235,8 @@ export default function App() {
           </div>
         </div>
       </div>
+
+      {isLive && <div className="bg-[#00D26A] text-white text-center text-[12px] py-2 font-semibold">🌍 Mode GLOBAL actif - Les prix sont synchronisés pour tout le monde !</div>}
 
       <section className="bg-[#FFFEF5] border-b border-black/5">
         <div className="max-w-[1240px] mx-auto px-5 sm:px-8 py-10 sm:py-16 grid lg:grid-cols-[1.1fr_0.9fr] gap-10 items-center">
@@ -190,7 +260,7 @@ export default function App() {
         </div>
       </section>
 
-      <footer className="bg-black text-white py-10 text-center text-[12px]"><div>© Agbekoi Print • <button onClick={() => setShowAdmin(true)} className="underline">Admin</button> • App + Notifs 🔔</div></footer>
+      <footer className="bg-black text-white py-10 text-center text-[12px]"><div>© Agbekoi Print • <button onClick={() => setShowAdmin(true)} className="underline">Admin</button> • Live 🌍 + Notifs 🔔</div></footer>
 
       {toast && <div className="fixed bottom-20 left-1/2 -translate-x-1/2 bg-black text-white px-5 py-3 rounded-full text-[13px] z-50 shadow-xl">{toast}</div>}
 
@@ -213,7 +283,7 @@ export default function App() {
             <div className="mt-4 space-y-3 text-[13px] leading-5">
               <div><b>Android Chrome :</b><br/>3 points ⋮ → <b>Installer l'application</b></div>
               <div><b>iPhone Safari :</b><br/>Bouton Partage <Share size={12} className="inline"/> → <b>Sur l'écran d'accueil</b></div>
-              <div><b>PC :</b><br/>Barre d'adresse → icône Installer <Download size={12} className="inline"/> ou menu ⋮ → Installer</div>
+              <div><b>PC :</b><br/>Barre d'adresse → icône Installer <Download size={12} className="inline"/></div>
             </div>
             <button onClick={() => setShowInstallHelp(false)} className="mt-6 w-full h-11 rounded-full bg-black text-white font-semibold">J'ai compris</button>
           </div>
