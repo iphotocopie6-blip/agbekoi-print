@@ -1,0 +1,18 @@
+{
+  "name": "Agbekoi Print - Impression Pro Abidjan",
+  "short_name": "Agbekoi Print",
+  "description": "Impression pro à Abidjan - Affiches, bâches, cartes, flyers, t-shirts. Devis 30s.",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#ffffff",
+  "theme_color": "#FFC700",
+  "orientation": "portrait-primary",
+  "icons": [
+    {
+      "src": "https://cdn-icons-png.flaticon.com/512/1055/1055666.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ]
+}
